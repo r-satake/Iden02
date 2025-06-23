@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>メンデルの法則 遺伝子推理ゲーム</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'M PLUS Rounded 1c', sans-serif;
+            touch-action: manipulation;
+        }
+        .card {
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out, opacity 0.3s;
+            user-select: none;
+        }
+        .pea {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 10px;
+            color: white;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+            position: relative;
+            border: 3px solid rgba(0,0,0,0.2);
+        }
+        .pea-yellow { background-color: #facc15; } /* yellow-400 */
+        .pea-green { background-color: #4ade80; } /* green-400 */
+        .pea-round { /* default */ }
+        .pea-wrinkled::after {
+            content: '';
+            position: absolute;
+            width: 120%;
+            height: 120%;
+            border: 3px dashed rgba(0,0,0,0.3);
+            border-radius: 50%;
+            animation: rotate 10s linear infinite;
+        }
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .geno-btn {
+            transition: background-color 0.2s, color 0.2s, transform 0.1s;
+            cursor: pointer;
+        }
+        .geno-btn.selected {
+            background-color: #2563eb; /* blue-600 */
+            color: white;
+            font-weight: bold;
+            transform: scale(1.05);
+        }
+        .rank-s { color: #f59e0b; } /* amber-500 */
+        .rank-a { color: #ef4444; } /* red-500 */
+        .rank-b { color: #3b82f6; } /* blue-500 */
+        .rank-c { color: #6b7280; } /* gray-500 */
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div id="game-container" class="max-w-4xl mx-auto p-4 md:p-6">
+        <header class="text-center mb-6">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-700">メンデルの法則 遺伝子推理ゲーム</h1>
+            <p class="text-gray-500 mt-1">生まれた子の特徴から、親の遺伝子を突き止めよう！</p>
+        </header>
+
+        <!-- ルール説明ボタンとモーダル -->
+        <div class="text-center mb-6">
+            <button id="rules-button" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105">
+                遊び方
+            </button>
+        </div>
+        
+        <div id="rules-modal" class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 hidden">
+            <div class="bg-white p-6 rounded-lg shadow-xl max-w-lg w-11/12">
+                <h2 class="text-2xl font-bold mb-4">遊び方</h2>
+                <div class="space-y-3 text-gray-600">
+                    <p>1. ゲームは全3問です。3問クリアした時点の合計試行回数でランクが決まります。</p>
+                    <p>2. 「生まれた子」エリアに、子の4つの表現型と、その親の組み合わせから生まれる数の<strong class="text-blue-600">理論的な割合（分離比）</strong>が表示されます。</p>
+                    <p>3. この分離比を手がかりに、両親が持つ遺伝子の組み合わせを推理します。</p>
+                    <p>4. 形や色を決める1対の遺伝子を<strong>対立遺伝子</strong>と呼びます。片方の遺伝子はもう片方に対して優劣の関係があります。</p>
+                    <p><strong>遺伝子のルール:</strong><br>
+                    <span class="font-bold">色:</span> 遺伝子Aは<strong>顕性形質</strong>（黄）、aは<strong>潜性形質</strong>（緑）です。<br>
+                    <span class="font-bold">形:</span> 遺伝子Bは<strong>顕性形質</strong>（丸）、bは<strong>潜性形質</strong>（しわ）です。</p>
+                    <p>5. 親の遺伝子型を選択し、「答え合わせ」を押してください。1問につき30回まで挑戦できます。</p>
+                </div>
+                <button id="close-rules-button" class="mt-6 bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg w-full">閉じる</button>
+            </div>
+        </div>
+
+        <!-- ゲームボード -->
+        <main id="game-board" class="bg-white p-4 md:p-6 rounded-xl shadow-lg">
+            <!-- 結果表示エリア -->
+            <div id="result-area" class="text-center mb-4 min-h-[5rem] flex flex-col justify-center items-center bg-gray-50 p-3 rounded-lg">
+                 <p id="round-display" class="text-xl font-bold text-gray-600"></p>
+                 <p id="result-text" class="text-lg font-semibold text-gray-700 mt-2">「ゲーム開始」を押してください。</p>
+                 <p id="attempts-display" class="text-md text-gray-500 mt-1"></p>
+            </div>
+            
+            <!-- 生まれた子エリア -->
+            <div>
+                <h2 class="text-xl font-bold mb-3 text-center text-gray-600">生まれた子（表現型の分離比）</h2>
+                <div id="offspring-area" class="grid grid-cols-2 sm:grid-cols-4 gap-4 justify-center bg-blue-50 p-4 rounded-lg min-h-[120px]">
+                </div>
+            </div>
+
+            <!-- 親の遺伝子型選択エリア -->
+            <div id="parent-selection-area" class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- 親1 -->
+                <div class="p-4 bg-green-50 rounded-lg">
+                    <h3 class="text-lg font-bold text-center mb-3">親1 の遺伝子型</h3>
+                    <div class="space-y-3">
+                        <div class="flex items-center"><span class="w-16 font-semibold">色 (A/a):</span><div class="flex-1 grid grid-cols-3 gap-2" data-parent="1" data-trait="color"><button class="geno-btn bg-white py-2 rounded-md border shadow-sm">AA</button><button class="geno-btn bg-white py-2 rounded-md border shadow-sm">Aa</button><button class="geno-btn bg-white py-2 rounded-md border shadow-sm">aa</button></div></div>
+                        <div class="flex items-center"><span class="w-16 font-semibold">形 (B/b):</span><div class="flex-1 grid grid-cols-3 gap-2" data-parent="1" data-trait="shape"><button class="geno-btn bg-white py-2 rounded-md border shadow-sm">BB</button><button class="geno-btn bg-white py-2 rounded-md border shadow-sm">Bb</button><button class="geno-btn bg-white py-2 rounded-md border shadow-sm">bb</button></div></div>
+                    </div>
+                </div>
+                <!-- 親2 -->
+                <div class="p-4 bg-green-50 rounded-lg">
+                    <h3 class="text-lg font-bold text-center mb-3">親2 の遺伝子型</h3>
+                    <div class="space-y-3">
+                        <div class="flex items-center"><span class="w-16 font-semibold">色 (A/a):</span><div class="flex-1 grid grid-cols-3 gap-2" data-parent="2" data-trait="color"><button class="geno-btn bg-white py-2 rounded-md border shadow-sm">AA</button><button class="geno-btn bg-white py-2 rounded-md border shadow-sm">Aa</button><button class="geno-btn bg-white py-2 rounded-md border shadow-sm">aa</button></div></div>
+                        <div class="flex items-center"><span class="w-16 font-semibold">形 (B/b):</span><div class="flex-1 grid grid-cols-3 gap-2" data-parent="2" data-trait="shape"><button class="geno-btn bg-white py-2 rounded-md border shadow-sm">BB</button><button class="geno-btn bg-white py-2 rounded-md border shadow-sm">Bb</button><button class="geno-btn bg-white py-2 rounded-md border shadow-sm">bb</button></div></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 操作ボタン -->
+            <div id="action-buttons" class="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
+                <button id="check-answer-button" class="w-full sm:w-auto bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-8 rounded-lg shadow-md transition-transform transform hover:scale-105">答え合わせ</button>
+                <button id="next-question-button" class="w-full sm:w-auto bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-lg shadow-md transition-transform transform hover:scale-105 hidden">次の問題へ</button>
+            </div>
+        </main>
+
+        <!-- 最終結果表示 -->
+        <div id="final-result-screen" class="hidden text-center bg-white p-8 rounded-xl shadow-lg">
+            <h2 class="text-3xl font-bold mb-4">最終結果</h2>
+            <p class="text-xl mb-2">あなたのランクは...</p>
+            <p id="final-rank" class="text-8xl font-black mb-4"></p>
+            <p id="total-attempts" class="text-lg text-gray-600 mb-8"></p>
+            <button id="restart-game-button" class="w-full sm:w-auto bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-8 rounded-lg shadow-md transition-transform transform hover:scale-105">もう一度挑戦する</button>
+        </div>
+        
+        <!-- 初期開始ボタン -->
+        <div id="start-screen" class="text-center mt-8">
+            <button id="start-game-button" class="w-full sm:w-auto bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-8 rounded-lg shadow-md transition-transform transform hover:scale-105">ゲーム開始</button>
+        </div>
+    </div>
+
+    <!-- カードテンプレート -->
+    <template id="card-template">
+        <div class="card bg-white p-3 rounded-lg border-2 border-gray-200 flex flex-col items-center gap-1 shadow-sm">
+            <div class="pea"></div>
+            <p class="phenotype-text font-bold text-center text-sm"></p>
+            <p class="ratio-text text-sm text-gray-600"></p>
+            <div class="genotype-container mt-1"></div>
+        </div>
+    </template>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- DOM要素 ---
+        const resultText = document.getElementById('result-text'), attemptsDisplay = document.getElementById('attempts-display'), roundDisplay = document.getElementById('round-display');
+        const offspringArea = document.getElementById('offspring-area'), checkAnswerButton = document.getElementById('check-answer-button'), nextQuestionButton = document.getElementById('next-question-button');
+        const cardTemplate = document.getElementById('card-template'), rulesButton = document.getElementById('rules-button'), rulesModal = document.getElementById('rules-modal'), closeRulesButton = document.getElementById('close-rules-button');
+        const parentSelectors = document.querySelectorAll('.geno-btn');
+        const gameBoard = document.getElementById('game-board'), finalResultScreen = document.getElementById('final-result-screen'), startScreen = document.getElementById('start-screen');
+        const startGameButton = document.getElementById('start-game-button'), restartGameButton = document.getElementById('restart-game-button');
+        const finalRank = document.getElementById('final-rank'), totalAttemptsEl = document.getElementById('total-attempts');
+        
+        // --- ゲーム定義 ---
+        const GENES = { color: { dom: 'A', rec: 'a', domPheno: '黄', recPheno: '緑' }, shape: { dom: 'B', rec: 'b', domPheno: '丸', recPheno: 'しわ' } };
+        const GENOTYPES = { color: ['AA', 'Aa', 'aa'], shape: ['BB', 'Bb', 'bb'] };
+        const ALL_PHENOTYPES = ['黄・丸', '黄・しわ', '緑・丸', '緑・しわ'];
+        const MAX_ROUNDS = 3; // ラウンド数を3に変更
+        const MAX_ATTEMPTS_PER_ROUND = 30;
+
+        // --- ゲーム状態 ---
+        let hiddenParent1, hiddenParent2;
+        let gameActive = false, attempts = 0, totalAttempts = 0, currentRound = 0;
+
+        // --- ゲームロジック ---
+        function startNewSession() {
+            totalAttempts = 0;
+            currentRound = 1;
+            startScreen.classList.add('hidden');
+            finalResultScreen.classList.add('hidden');
+            gameBoard.classList.remove('hidden');
+            startNextRound();
+        }
+
+        function startNextRound() {
+            gameActive = true;
+            attempts = 0;
+            
+            const p1Color = GENOTYPES.color[Math.floor(Math.random() * 3)], p1Shape = GENOTYPES.shape[Math.floor(Math.random() * 3)];
+            const p2Color = GENOTYPES.color[Math.floor(Math.random() * 3)], p2Shape = GENOTYPES.shape[Math.floor(Math.random() * 3)];
+            hiddenParent1 = p1Color + p1Shape;
+            hiddenParent2 = p2Color + p2Shape;
+
+            const offspringRatio = calculateOffspringRatio(hiddenParent1, hiddenParent2);
+            renderOffspring(offspringRatio);
+            resetUIForNewRound();
+        }
+
+        function getGametes(g) { const c=[g[0],g[1]], s=[g[2],g[3]], gs=new Set(); c.forEach(a=>s.forEach(b=>gs.add(a+b))); return [...gs]; }
+        function getPhenotypeFromGenotype(g) { const c=g.includes(GENES.color.dom)?GENES.color.domPheno:GENES.color.recPheno, s=g.includes(GENES.shape.dom)?GENES.shape.domPheno:GENES.shape.recPheno; return `${c}・${s}`; }
+        
+        function calculateOffspringRatio(p1Geno, p2Geno) {
+            const p1Gametes = getGametes(p1Geno), p2Gametes = getGametes(p2Geno);
+            const phenotypeCounts = { '黄・丸': 0, '黄・しわ': 0, '緑・丸': 0, '緑・しわ': 0 };
+            p1Gametes.forEach(g1 => p2Gametes.forEach(g2 => {
+                const offspringGeno = [g1[0], g2[0]].sort().join('') + [g1[1], g2[1]].sort().join('');
+                phenotypeCounts[getPhenotypeFromGenotype(offspringGeno)]++;
+            }));
+            const multiplier = 16 / (p1Gametes.length * p2Gametes.length);
+            for (const phenotype in phenotypeCounts) { phenotypeCounts[phenotype] *= multiplier; }
+            return phenotypeCounts;
+        }
+        
+        function getPossibleGenotypesForPhenotype(p,p1,p2) { const g1=getGametes(p1),g2=getGametes(p2),pg=new Set(); g1.forEach(a=>g2.forEach(b=>{const o=[a[0],b[0]].sort().join('')+[a[1],b[1]].sort().join('');if(getPhenotypeFromGenotype(o)===p)pg.add(o);})); return [...pg]; }
+
+        function checkAnswer() {
+            if (!gameActive) return;
+
+            const getSelection=(p,t)=>{const s=document.querySelector(`div[data-parent='${p}'][data-trait='${t}'] .selected`);return s?s.textContent:null;};
+            const p1Color=getSelection('1','color'), p1Shape=getSelection('1','shape'), p2Color=getSelection('2','color'), p2Shape=getSelection('2','shape');
+
+            if (!p1Color||!p1Shape||!p2Color||!p2Shape) { resultText.textContent='すべての遺伝子型を選択してください。'; resultText.className='text-lg font-semibold text-yellow-600'; return; }
+            
+            attempts++;
+            attemptsDisplay.textContent = `試行回数: ${attempts} 回`;
+
+            const guessedP1=p1Color+p1Shape, guessedP2=p2Color+p2Shape;
+            const sortGeno=g=>[g.slice(0,2).split('').sort().join(''), g.slice(2,4).split('').sort().join('')].join('');
+            const sortedH1=sortGeno(hiddenParent1), sortedH2=sortGeno(hiddenParent2), sortedG1=sortGeno(guessedP1), sortedG2=sortGeno(guessedP2);
+            const isCorrect=(sortedG1===sortedH1&&sortedG2===sortedH2)||(sortedG1===sortedH2&&sortedG2===sortedH1);
+
+            if (isCorrect) {
+                handleCorrectAnswer();
+            } else if (attempts >= MAX_ATTEMPTS_PER_ROUND) {
+                handleMaxAttemptsReached();
+            } else {
+                 resultText.textContent = '残念、不正解です。その組み合わせではこの分離比になりません。';
+                 resultText.className = 'text-lg font-semibold text-red-500';
+            }
+        }
+        
+        function handleCorrectAnswer() {
+            gameActive = false;
+            totalAttempts += attempts;
+            resultText.textContent = `正解！親の組み合わせは [${hiddenParent1}] と [${hiddenParent2}] でした！`;
+            resultText.className = 'text-lg font-semibold text-green-500';
+            revealCorrectGenotypes();
+            showNextButton();
+        }
+
+        function handleMaxAttemptsReached() {
+            gameActive = false;
+            totalAttempts += MAX_ATTEMPTS_PER_ROUND;
+            resultText.textContent = `残念！正解は [${hiddenParent1}] と [${hiddenParent2}] でした。`;
+            resultText.className = 'text-lg font-semibold text-red-500';
+            revealCorrectGenotypes();
+            showNextButton();
+        }
+
+        function revealCorrectGenotypes() {
+            offspringArea.querySelectorAll('.card').forEach(c=>{
+                const genotypeContainer = c.querySelector('.genotype-container');
+                if(genotypeContainer.hasChildNodes()) return;
+                const p = c.querySelector('.phenotype-text').textContent;
+                const pgs = getPossibleGenotypesForPhenotype(p, hiddenParent1, hiddenParent2);
+                if(pgs.length > 0){
+                    const gt = document.createElement('p');
+                    gt.className = 'text-xs text-gray-500 genotype-display';
+                    gt.textContent = `(${pgs.join(', ')})`;
+                    genotypeContainer.appendChild(gt);
+                }
+            });
+        }
+
+        function showNextButton() {
+            checkAnswerButton.classList.add('hidden');
+            nextQuestionButton.classList.remove('hidden');
+            if (currentRound === MAX_ROUNDS) { nextQuestionButton.textContent = '結果を見る'; }
+        }
+        
+        function handleNextQuestion() {
+            currentRound++;
+            if (currentRound > MAX_ROUNDS) { showFinalResults(); } 
+            else { startNextRound(); }
+        }
+
+        function showFinalResults() {
+            gameBoard.classList.add('hidden');
+            finalResultScreen.classList.remove('hidden');
+            let rank, rankClass;
+            // ランク判定基準を変更
+            if (totalAttempts <= 10) { rank = 'Ｓ'; rankClass = 'rank-s'; }
+            else if (totalAttempts <= 20) { rank = 'Ａ'; rankClass = 'rank-a'; }
+            else if (totalAttempts <= 40) { rank = 'Ｂ'; rankClass = 'rank-b'; }
+            else { rank = 'Ｃ'; rankClass = 'rank-c'; }
+            finalRank.textContent = rank;
+            finalRank.className = `text-8xl font-black mb-4 ${rankClass}`;
+            totalAttemptsEl.textContent = `合計試行回数: ${totalAttempts} 回`;
+        }
+
+        // --- UI関連 ---
+        function renderOffspring(ratioData) {
+            offspringArea.innerHTML='';
+            ALL_PHENOTYPES.forEach(pheno => {
+                const cardNode = cardTemplate.content.cloneNode(true);
+                const cardElement = cardNode.querySelector('.card'), peaElement = cardNode.querySelector('.pea');
+                const phenotypeTextElement = cardNode.querySelector('.phenotype-text'), ratioTextElement = cardNode.querySelector('.ratio-text');
+                const [color, shape] = pheno.split('・');
+                phenotypeTextElement.textContent = pheno;
+                peaElement.classList.add(color === GENES.color.domPheno ? 'pea-yellow' : 'pea-green');
+                peaElement.classList.add(shape === GENES.shape.domPheno ? 'pea-round' : 'pea-wrinkled');
+                const ratio = ratioData[pheno];
+                ratioTextElement.textContent = `割合: ${ratio}`;
+                if (ratio === 0) { cardElement.classList.add('opacity-40'); }
+                offspringArea.appendChild(cardElement);
+            });
+        }
+        
+        function handleSelection(e) { if(!gameActive)return;const b=e.currentTarget,c=b.parentElement;c.querySelectorAll('.geno-btn').forEach(btn=>btn.classList.remove('selected'));b.classList.add('selected'); }
+
+        function resetUIForNewRound() {
+            roundDisplay.textContent = `問題 ${currentRound} / ${MAX_ROUNDS}`;
+            resultText.textContent = '親の遺伝子型を両方選択して「答え合わせ」を押してください。';
+            resultText.className = 'text-lg font-semibold text-gray-700';
+            attemptsDisplay.textContent = `試行回数: ${attempts} 回`;
+            parentSelectors.forEach(btn => btn.classList.remove('selected'));
+            checkAnswerButton.classList.remove('hidden');
+            nextQuestionButton.classList.add('hidden');
+            nextQuestionButton.textContent = '次の問題へ';
+        }
+
+        // --- イベントリスナー ---
+        startGameButton.addEventListener('click', startNewSession);
+        restartGameButton.addEventListener('click', startNewSession);
+        checkAnswerButton.addEventListener('click', checkAnswer);
+        nextQuestionButton.addEventListener('click', handleNextQuestion);
+        rulesButton.addEventListener('click', () => rulesModal.classList.remove('hidden'));
+        closeRulesButton.addEventListener('click', () => rulesModal.classList.add('hidden'));
+        rulesModal.addEventListener('click', (e) => { if (e.target === rulesModal) rulesModal.classList.add('hidden'); });
+        parentSelectors.forEach(button => button.addEventListener('click', handleSelection));
+
+        // 初期表示
+        gameBoard.classList.add('hidden');
+    });
+    </script>
+</body>
+</html>
